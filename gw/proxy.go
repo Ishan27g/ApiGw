@@ -1,4 +1,4 @@
-package apiGw
+package gw
 
 import (
 	"context"
@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
 const (
@@ -19,21 +22,23 @@ type ApiGw interface {
 	// Start api-gw, non-blocking
 	Start(close chan bool)
 	// RegisterService registers a host to redirect requests that match the urlPrefix
-	registerService(upstream upstream, ctx context.Context, check bool)
+	setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool, t table.Writer)
 	// GetServiceProxy returns the http.ReverseProxy for the host that matched the urlPrefix
 	getServiceProxy(urlPrefix string) (string, *httputil.ReverseProxy)
 }
 
 func NewFromFile(fileName string) ApiGw {
-	config := read(fileName)
-	return NewFromConfig(config)
+	if config, _ := ReadConfFile(fileName); config.Listen != ""{
+		return NewFromConfig(config)
+	}
+	return nil
 }
 
 type proxy struct {
 	client  http.Client
 	addr    string
 	delay   time.Duration
-	proxies map[string]service // url-prefix <-> service
+	proxies map[string]upstreamGroup // url-prefix <-> upstreamGroup
 }
 
 func (p *proxy) Start(close chan bool) {
@@ -53,20 +58,62 @@ func NewFromConfig(config Config) ApiGw {
 			},
 		},
 		delay:   delay,
-		proxies: map[string]service{},
+		proxies: map[string]upstreamGroup{},
 		addr:    config.Listen,
 	}
 
-	for _, service := range config.Upstreams {
-		proxy.registerService(*service, ctx, config.Check)
+	var upStreamGroups []upstreamGroup
+
+	for _, group := range config.Balancer {
+		g := *group
+		upStreamGroups = append(upStreamGroups, new(g))
 	}
+
+	bGroup := convertUpstream() (config.Upstreams)
+	for _, group := range bGroup {
+		upStreamGroups = append(upStreamGroups, new(group))
+	}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleLight)
+	t.Style().Options.DrawBorder = false
+	t.AppendHeader(table.Row{"Upstream Group", "Destination"})
+
+	for _, upStreamGroup := range upStreamGroups {
+		proxy.setUpstreamGroup(upStreamGroup, ctx, config.Check, t)
+		t.AppendSeparator()
+	}
+	t.Render()
 	if len(proxy.proxies) == 0 {
 		log.Fatalln("no upstreams detected")
 	}
-	for _, service := range proxy.proxies {
-		log.Print(service.upstream.UrlPrefix, "\t-> \t", service.upstream.Addr)
+	/*
+	for _, upStreamGroup := range proxy.proxies {
+		for _, upstream := range upStreamGroup.GetHosts() {
+			log.Print(upStreamGroup.GetUrlPrefix(), "\t-> \t", upstream)
+		}
 	}
+	 */
 	return proxy
+}
+
+func convertUpstream() func(upstreams []*upstream) []balance {
+	return upstreamToBalanceGroup
+}
+
+// convert all upstream blocks to balancer group
+func upstreamToBalanceGroup(upstreams []*upstream) []balance {
+	var bGroups []balance
+	for _, upStream := range upstreams {
+		var upStreamAdds []string
+		upStreamAdds = append(upStreamAdds, upStream.Addr)
+		bGroup := balance{
+			Addr:      upStreamAdds,
+			UrlPrefix: upStream.UrlPrefix,
+		}
+		bGroups = append(bGroups, bGroup)
+	}
+	return bGroups
 }
 
 func (p *proxy) start(close chan bool) {
@@ -90,20 +137,26 @@ func (p *proxy) start(close chan bool) {
 }
 
 // RegisterService adds a new api destination for the urlPrefix
-func (p *proxy) registerService(upstream upstream, ctx context.Context, check bool) {
-	if check {
-		if checkHostConnection(p.client, upstream.Addr, ctx) {
-			p.proxies[upstream.UrlPrefix] = newService(upstream)
+func (p *proxy) setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool, t table.Writer) {
+	// if check {
+		// if checkHostConnection(p.client, upstreamGroup(), ctx) {
+		p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup
+		var logs []table.Row
+		for _, upstream := range upStreamGroup.GetHosts() {
+			logs = append(logs,table.Row{upStreamGroup.GetUrlPrefix(), upstream})
 		}
-	} else {
-		p.proxies[upstream.UrlPrefix] = newService(upstream)
-	}
+		t.AppendRows(logs)
+		// }
+	// } else {
+		// p.proxies[upstream.UrlPrefix] = newService(upstream)
+	// }
 }
 
 // GetServiceProxy matches the urlPrefix & returns corresponding reverseProxy
 func (p *proxy) getServiceProxy(urlPrefix string) (string, *httputil.ReverseProxy) {
-	for proxyUrl, service := range p.proxies {
+	for proxyUrl, upStreamGroup := range p.proxies {
 		if strings.HasPrefix(urlPrefix, proxyUrl) {
+			service := *upStreamGroup.GetNext()
 			return service.upstream.Addr, service.proxy
 		}
 	}
