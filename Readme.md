@@ -5,6 +5,15 @@ listen = ":9000" # address for gateway
 checkConnections = true # optional, default false. Ping upstreams before start
 addDelay = "2s" # optional, default 0s
 
+balance { # load balance
+  addr = [
+    "http://localhost:7001",
+    "http://localhost:7002",
+    "http://localhost:7003"
+  ]
+  urlPrefix = "/"         # request url prefix match
+}
+
 upstream "service-1" {
   addr = "http://localhost:5001" # destination to route the request
   urlPrefix = "/prefix1"         # request url prefix match 

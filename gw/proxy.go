@@ -28,7 +28,7 @@ type ApiGw interface {
 }
 
 func NewFromFile(fileName string) ApiGw {
-	if config, _ := ReadConfFile(fileName); config.Listen != ""{
+	if config, _ := ReadConfFile(fileName); config.Listen != "" {
 		return NewFromConfig(config)
 	}
 	return nil
@@ -69,7 +69,7 @@ func NewFromConfig(config Config) ApiGw {
 		upStreamGroups = append(upStreamGroups, new(g))
 	}
 
-	bGroup := convertUpstream() (config.Upstreams)
+	bGroup := convertUpstream()(config.Upstreams)
 	for _, group := range bGroup {
 		upStreamGroups = append(upStreamGroups, new(group))
 	}
@@ -88,12 +88,12 @@ func NewFromConfig(config Config) ApiGw {
 		log.Fatalln("no upstreams detected")
 	}
 	/*
-	for _, upStreamGroup := range proxy.proxies {
-		for _, upstream := range upStreamGroup.GetHosts() {
-			log.Print(upStreamGroup.GetUrlPrefix(), "\t-> \t", upstream)
+		for _, upStreamGroup := range proxy.proxies {
+			for _, upstream := range upStreamGroup.GetHosts() {
+				log.Print(upStreamGroup.GetUrlPrefix(), "\t-> \t", upstream)
+			}
 		}
-	}
-	 */
+	*/
 	return proxy
 }
 
@@ -139,16 +139,16 @@ func (p *proxy) start(close chan bool) {
 // RegisterService adds a new api destination for the urlPrefix
 func (p *proxy) setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool, t table.Writer) {
 	// if check {
-		// if checkHostConnection(p.client, upstreamGroup(), ctx) {
-		p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup
-		var logs []table.Row
-		for _, upstream := range upStreamGroup.GetHosts() {
-			logs = append(logs,table.Row{upStreamGroup.GetUrlPrefix(), upstream})
-		}
-		t.AppendRows(logs)
-		// }
+	// if checkHostConnection(p.client, upstreamGroup(), ctx) {
+	p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup
+	var logs []table.Row
+	for _, upstream := range upStreamGroup.GetHosts() {
+		logs = append(logs, table.Row{upStreamGroup.GetUrlPrefix(), upstream})
+	}
+	t.AppendRows(logs)
+	// }
 	// } else {
-		// p.proxies[upstream.UrlPrefix] = newService(upstream)
+	// p.proxies[upstream.UrlPrefix] = newService(upstream)
 	// }
 }
 

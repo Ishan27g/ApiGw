@@ -15,12 +15,12 @@ type Config struct {
 	Delay     string      `hcl:"addDelay,optional"`
 	Check     bool        `hcl:"checkConnections,optional"`
 	Upstreams []*upstream `hcl:"upstream,block"`
-	Balancer []*balance `hcl:"balance,block"`
+	Balancer  []*balance  `hcl:"balance,block"`
 }
 
 type balance struct {
 	Addr      []string `hcl:"addr"`
-	UrlPrefix string `hcl:"urlPrefix"`
+	UrlPrefix string   `hcl:"urlPrefix"`
 }
 type upstream struct {
 	Name      string `hcl:",label"`
