@@ -32,18 +32,19 @@ upstream "service-3" {
 
 ### Usage
 
-```go
-package main
+Commands
+- check {file.hcl}
+- start {file.hcl}
 
-import "github.com/Ishan27g/apiGw"
+Either install globally as CLI 
 
-func main() {
-    stop := make(chan bool, 1)
+```shell
+$ go install
+$ ApiGw {command} {hcl-file}
+```
 
-    gw := apiGw.NewFromFile("conf.hcl")
+Or, without installing
 
-    gw.Start(stop)
-    
-    // stop <- true
-}
+```shell
+go run main.go {command} {hcl-file}
 ```

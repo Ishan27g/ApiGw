@@ -39,7 +39,6 @@ var startCmd = cli.Command{
 			return cli.Exit("gateway error", 1)
 		}
 		apiGw.Start(stop)
-		fmt.Println(os.Getpid())
 		<-stop
 		return nil
 	},
@@ -67,8 +66,6 @@ func main() {
 			&startCmd, &checkCmd,
 		},
 	}
-
-	app.HideHelp = true
 
 	err := app.Run(os.Args)
 	if err != nil {
