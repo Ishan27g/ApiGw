@@ -40,8 +40,7 @@ func ReadConfFile(filename string) (Config, error) {
 	}
 	return config, errors.New(filename + " - Ok")
 }
-
-func checkHostConnection(client http.Client, host string, ctx context.Context) bool {
+var checkHostConnection = func(client http.Client, host string, ctx context.Context) bool {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, host, nil)
 	if err != nil {
 		log.Panicf("Cannot create request: %s\n", err)

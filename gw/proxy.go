@@ -22,9 +22,10 @@ type ApiGw interface {
 	// Start api-gw, non-blocking
 	Start(close chan bool)
 	// RegisterService registers a host to redirect requests that match the urlPrefix
-	setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool, t table.Writer)
+	setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool)
 	// GetServiceProxy returns the http.ReverseProxy for the host that matched the urlPrefix
 	getServiceProxy(urlPrefix string) (string, *httputil.ReverseProxy)
+	printProxyTable()
 }
 
 func NewFromFile(fileName string) ApiGw {
@@ -64,37 +65,49 @@ func NewFromConfig(config Config) ApiGw {
 
 	var upStreamGroups []upstreamGroup
 
+	// read balancer from config
 	for _, group := range config.Balancer {
 		g := *group
 		upStreamGroups = append(upStreamGroups, new(g))
 	}
 
-	bGroup := convertUpstream()(config.Upstreams)
-	for _, group := range bGroup {
+	// read upstream from config
+	for _, group := range convertUpstream()(config.Upstreams) {
 		upStreamGroups = append(upStreamGroups, new(group))
 	}
+
+	// save upstream group
+	for _, upStreamGroup := range upStreamGroups {
+		proxy.setUpstreamGroup(upStreamGroup, ctx, config.Check)
+	}
+	if len(proxy.proxies) == 0 {
+		log.Fatalln("no upstreams detected")
+	}
+
+	proxy.printProxyTable()
+	return proxy
+}
+
+
+func (p *proxy)printProxyTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(table.StyleLight)
 	t.Style().Options.DrawBorder = false
 	t.AppendHeader(table.Row{"Upstream Group", "Destination"})
 
-	for _, upStreamGroup := range upStreamGroups {
-		proxy.setUpstreamGroup(upStreamGroup, ctx, config.Check, t)
+	forEachUpstreamGroup(func(upStreamGroup upstreamGroup) {
+
+		var logs []table.Row
+		forEachUpstreamHost(func(host string) {
+			logs = append(logs, table.Row{upStreamGroup.GetUrlPrefix(), host})
+		}, upStreamGroup)
+
+		t.AppendRows(logs)
 		t.AppendSeparator()
-	}
+
+	}, p.proxies)
 	t.Render()
-	if len(proxy.proxies) == 0 {
-		log.Fatalln("no upstreams detected")
-	}
-	/*
-		for _, upStreamGroup := range proxy.proxies {
-			for _, upstream := range upStreamGroup.GetHosts() {
-				log.Print(upStreamGroup.GetUrlPrefix(), "\t-> \t", upstream)
-			}
-		}
-	*/
-	return proxy
 }
 
 func convertUpstream() func(upstreams []*upstream) []balance {
@@ -137,19 +150,27 @@ func (p *proxy) start(close chan bool) {
 }
 
 // RegisterService adds a new api destination for the urlPrefix
-func (p *proxy) setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool, t table.Writer) {
-	// if check {
-	// if checkHostConnection(p.client, upstreamGroup(), ctx) {
-	p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup
-	var logs []table.Row
-	for _, upstream := range upStreamGroup.GetHosts() {
-		logs = append(logs, table.Row{upStreamGroup.GetUrlPrefix(), upstream})
+func (p *proxy) setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool) {
+	if check { // ping before connection
+		forEachUpstreamHost(func(host string) {
+			if checkHostConnection(p.client, host, ctx){
+				p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup // overwrite for each lb
+			}
+		}, upStreamGroup)
+	 } else {
+		p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup
 	}
-	t.AppendRows(logs)
-	// }
-	// } else {
-	// p.proxies[upstream.UrlPrefix] = newService(upstream)
-	// }
+
+}
+func forEachUpstreamGroup(cb func(upstreamGroup), upstreamGroups map[string]upstreamGroup){
+	for _, upStreamGroup := range upstreamGroups {
+		cb(upStreamGroup)
+	}
+}
+func forEachUpstreamHost(cb func(string), upStreamGroup upstreamGroup) {
+	for _, upstream := range upStreamGroup.GetHosts() {
+		cb(upstream)
+	}
 }
 
 // GetServiceProxy matches the urlPrefix & returns corresponding reverseProxy

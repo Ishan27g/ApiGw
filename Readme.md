@@ -36,11 +36,12 @@ Commands
 - check {file.hcl}
 - start {file.hcl}
 
-Either install globally as CLI 
+Either install globally as a cli 
 
 ```shell
+# cd ApiGw/
 $ go install
-$ ApiGw {command} {hcl-file}
+$ apiGw {command} {hcl-file}
 ```
 
 Or, without installing
