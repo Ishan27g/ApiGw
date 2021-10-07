@@ -1,4 +1,4 @@
-package gw
+package apiGw
 
 import (
 	"context"
@@ -19,7 +19,7 @@ const (
 )
 
 type ApiGw interface {
-	// Start api-gw, non-blocking
+	// Start api-apiGw, non-blocking
 	Start(close chan bool)
 	// RegisterService registers a host to redirect requests that match the urlPrefix
 	setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool)
@@ -88,8 +88,7 @@ func NewFromConfig(config Config) ApiGw {
 	return proxy
 }
 
-
-func (p *proxy)printProxyTable() {
+func (p *proxy) printProxyTable() {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(table.StyleLight)
@@ -153,16 +152,16 @@ func (p *proxy) start(close chan bool) {
 func (p *proxy) setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool) {
 	if check { // ping before connection
 		forEachUpstreamHost(func(host string) {
-			if checkHostConnection(p.client, host, ctx){
+			if checkHostConnection(p.client, host, ctx) {
 				p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup // overwrite for each lb
 			}
 		}, upStreamGroup)
-	 } else {
+	} else {
 		p.proxies[upStreamGroup.GetUrlPrefix()] = upStreamGroup
 	}
 
 }
-func forEachUpstreamGroup(cb func(upstreamGroup), upstreamGroups map[string]upstreamGroup){
+func forEachUpstreamGroup(cb func(upstreamGroup), upstreamGroups map[string]upstreamGroup) {
 	for _, upStreamGroup := range upstreamGroups {
 		cb(upStreamGroup)
 	}

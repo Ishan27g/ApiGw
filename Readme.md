@@ -11,7 +11,7 @@ balance { # load balance
     "http://localhost:7002",
     "http://localhost:7003"
   ]
-  urlPrefix = "/"         # request url prefix match
+  urlPrefix = "/status"         # request url prefix match
 }
 
 upstream "service-1" {
@@ -32,15 +32,20 @@ upstream "service-3" {
 
 ### Usage
 
-Commands
-- check {file.hcl}
-- start {file.hcl}
+Can be used as a package, or as cli tool
 
-Either install globally as a cli 
+#### CLI
+
+Commands
+- { check } { file.hcl }
+- { start } { file.hcl }
+
+Either install globally as a cli
 
 ```shell
 # cd ApiGw/
 $ go install
+$ apiGw --help
 $ apiGw {command} {hcl-file}
 ```
 
@@ -48,4 +53,18 @@ Or, without installing
 
 ```shell
 go run main.go {command} {hcl-file}
+```
+
+#### Import as library
+
+```go
+package main
+import "github.com/Ishan27g/ApiGw/apiGw"
+
+func main() {
+    stopGateway := make(chan bool, 1)
+    
+    apiGw.NewFromFile("conf.hcl").Start(stopGateway)
+    // stopGateway <- true
+}
 ```

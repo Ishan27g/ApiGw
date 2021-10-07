@@ -9,7 +9,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/Ishan27g/ApiGw/gw"
+	"github.com/Ishan27g/ApiGw/apiGw"
 )
 
 func catchExit() chan bool {
@@ -34,7 +34,7 @@ var startCmd = cli.Command{
 			return cli.Exit("filename not provided", 1)
 		}
 		stop := catchExit()
-		apiGw := gw.NewFromFile(c.Args().First())
+		apiGw := apiGw.NewFromFile(c.Args().First())
 		if apiGw == nil {
 			return cli.Exit("gateway error", 1)
 		}
@@ -54,7 +54,7 @@ var checkCmd = cli.Command{
 		if c.Args().Len() == 0 {
 			return cli.Exit("filename not provided", 1)
 		}
-		_, err := gw.ReadConfFile(c.Args().First())
+		_, err := apiGw.ReadConfFile(c.Args().First())
 		fmt.Println(err.Error())
 		return nil
 	},
