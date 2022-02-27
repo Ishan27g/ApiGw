@@ -5,8 +5,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -24,7 +22,7 @@ type ApiGw interface {
 	// RegisterService registers a host to redirect requests that match the urlPrefix
 	setUpstreamGroup(upStreamGroup upstreamGroup, ctx context.Context, check bool)
 	// GetServiceProxy returns the http.ReverseProxy for the host that matched the urlPrefix
-	getServiceProxy(urlPrefix string) (string, *httputil.ReverseProxy)
+	getServiceProxy(urlPrefix string) (string, *RTPxy)
 	printProxyTable()
 }
 
@@ -131,10 +129,10 @@ func upstreamToBalanceGroup(upstreams []*upstream) []balance {
 func (p *proxy) start(close chan bool) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
-		if pHost, pHandler := p.getServiceProxy(r.URL.Path); pHandler != nil {
+		if pHost, pxy := p.getServiceProxy(r.URL.Path); pxy != nil {
 			<-time.After(p.delay)
-			logResponseStatus(pHandler, r.Method, r.URL, pHost, now)
-			pHandler.ServeHTTP(w, r)
+			rspStatus := pxy.RoundTrip(pHost, w,r)
+			log.Print(time.Since(now).Microseconds(), "us ", "- [", r.RequestURI, "] ", "\t -> \t", pHost, " ", rspStatus)
 		} else {
 			http.NotFound(w, r)
 		}
@@ -173,20 +171,12 @@ func forEachUpstreamHost(cb func(string), upStreamGroup upstreamGroup) {
 }
 
 // GetServiceProxy matches the urlPrefix & returns corresponding reverseProxy
-func (p *proxy) getServiceProxy(urlPrefix string) (string, *httputil.ReverseProxy) {
+func (p *proxy) getServiceProxy(urlPrefix string) (string, *RTPxy) {
 	for proxyUrl, upStreamGroup := range p.proxies {
 		if strings.HasPrefix(urlPrefix, proxyUrl) {
 			service := *upStreamGroup.GetNext()
-			return service.upstream.Addr, service.proxy
+			return service.upstream.Addr, &service.pxy
 		}
 	}
 	return "", nil
-}
-
-// logResponseStatus modifies the response handler to log the response status
-func logResponseStatus(pHandler *httputil.ReverseProxy, method string, r *url.URL, pHost string, then time.Time) {
-	pHandler.ModifyResponse = func(resp *http.Response) error {
-		log.Print(time.Since(then).Microseconds(), "us ", "- [", method, "] ", r, "\t -> \t", pHost, " ", resp.StatusCode)
-		return nil
-	}
 }
