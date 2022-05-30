@@ -9,7 +9,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/Ishan27g/ApiGw/apiGw"
+	"github.com/Ishan27g/ApiGw/pkg"
 )
 
 func catchExit() chan bool {
@@ -34,11 +34,11 @@ var startCmd = cli.Command{
 			return cli.Exit("filename not provided", 1)
 		}
 		stop := catchExit()
-		apiGw := apiGw.NewFromFile(c.Args().First())
+		apiGw := pkg.NewFromFile(c.Args().First())
 		if apiGw == nil {
 			return cli.Exit("gateway error", 1)
 		}
-		apiGw.Start(stop)
+		go apiGw.Start(stop)
 		<-stop
 		return nil
 	},
@@ -47,14 +47,14 @@ var checkCmd = cli.Command{
 	Name:            "check",
 	Aliases:         []string{"c"},
 	Usage:           "check a task to the list",
-	ArgsUsage:       "apiGw check {path to config.hcl}",
+	ArgsUsage:       "pkg check {path to config.hcl}",
 	HideHelp:        false,
 	HideHelpCommand: false,
 	Action: func(c *cli.Context) error {
 		if c.Args().Len() == 0 {
 			return cli.Exit("filename not provided", 1)
 		}
-		_, err := apiGw.ReadConfFile(c.Args().First())
+		_, err := pkg.ReadConfFile(c.Args().First())
 		fmt.Println(err.Error())
 		return nil
 	},

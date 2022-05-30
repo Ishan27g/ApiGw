@@ -45,8 +45,8 @@ Either install globally as a cli
 ```shell
 # cd ApiGw/
 $ go install
-$ apiGw --help
-$ apiGw {command} {hcl-file}
+$ pkg --help
+$ pkg {command} {hcl-file}
 ```
 
 Or, without installing
@@ -59,12 +59,13 @@ go run main.go {command} {hcl-file}
 
 ```go
 package main
-import "github.com/Ishan27g/ApiGw/apiGw"
+
+import "github.com/Ishan27g/ApiGw/pkg"
 
 func main() {
-    stopGateway := make(chan bool, 1)
-    
-    apiGw.NewFromFile("conf.hcl").Start(stopGateway)
-    // stopGateway <- true
+	stopGateway := make(chan bool, 1)
+
+	go apiGw.NewFromFile("conf.hcl").Start(stopGateway)
+	// stopGateway <- true
 }
 ```

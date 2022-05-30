@@ -1,4 +1,4 @@
-package apiGw
+package pkg
 
 import (
 	"context"
