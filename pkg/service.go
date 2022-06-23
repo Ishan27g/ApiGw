@@ -17,11 +17,11 @@ var defaultTransport http.RoundTripper = &http.Transport{
 }
 
 type service struct {
-	upstream upstream
+	upstream Upstream
 	pxy      *RTPxy
 }
 
-func newService(upstream upstream) service {
+func newService(upstream Upstream) service {
 	return service{
 		upstream: upstream,
 		pxy:      newProxy(upstream.Addr, upstream.UrlPrefix),

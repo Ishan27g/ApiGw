@@ -30,11 +30,23 @@ var startCmd = cli.Command{
 	HideHelp:        false,
 	HideHelpCommand: false,
 	Action: func(c *cli.Context) error {
+		var apiGw pkg.ApiGw
 		if c.Args().Len() == 0 {
-			return cli.Exit("filename not provided", 1)
+			apiGw = pkg.NewFromConfig(pkg.Config{
+				Listen: ":9999",
+				Check:  true,
+				Upstreams: []*pkg.Upstream{
+					{
+						Name:      "service-1",
+						Addr:      "http://localhost:5999",
+						UrlPrefix: "/any",
+					},
+				},
+			})
+		} else {
+			apiGw = pkg.NewFromFile(c.Args().First())
 		}
 		stop := catchExit()
-		apiGw := pkg.NewFromFile(c.Args().First())
 		if apiGw == nil {
 			return cli.Exit("gateway error", 1)
 		}

@@ -9,7 +9,7 @@ type upstreamGroup interface {
 	GetUrlPrefix() string
 	GetHosts() []string
 	GetNext() *service
-	AddHost(s *upstream)
+	AddHost(s *Upstream)
 	RemoveHost(addr string) (currentSize int)
 }
 type balanceGroup struct {
@@ -19,15 +19,15 @@ type balanceGroup struct {
 	services  *[]service
 }
 
-func (b *balanceGroup) AddHost(ups *upstream) {
+func (b *balanceGroup) AddHost(ups *Upstream) {
 	if ups.UrlPrefix != b.GetUrlPrefix() {
-		fmt.Println("s.upstream.UrlPrefix != b.GetUrlPrefix()")
+		fmt.Println("s.Upstream.UrlPrefix != b.GetUrlPrefix()")
 		return
 	}
 	b.lock.Lock()
 	defer b.lock.Unlock()
 	s := *b.services
-	s = append(s, newService(upstream{
+	s = append(s, newService(Upstream{
 		Name:      "",
 		Addr:      ups.Addr,
 		UrlPrefix: ups.UrlPrefix,
@@ -92,7 +92,7 @@ func (b *balanceGroup) GetNext() *service {
 func newUpsGroup(bGroup balance) upstreamGroup {
 	var services []service
 	for _, upStream := range bGroup.Addr {
-		services = append(services, newService(upstream{
+		services = append(services, newService(Upstream{
 			Name:      "balancer-group-abc",
 			Addr:      upStream,
 			UrlPrefix: bGroup.UrlPrefix,

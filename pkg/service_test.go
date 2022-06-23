@@ -56,13 +56,13 @@ func runServer(ctx context.Context, addr, endpoint string) {
 }
 func mockConfig() Config {
 	var bg []*balance
-	var ug []*upstream
+	var ug []*Upstream
 	bg = append(bg, &balance{
 		Addr:      ports1,
 		UrlPrefix: "/pong",
 	})
 	for i, port := range ports2 {
-		ug = append(ug, &upstream{
+		ug = append(ug, &Upstream{
 			Name:      "service" + port,
 			Addr:      port,
 			UrlPrefix: "/ping" + strconv.Itoa(i),
@@ -153,10 +153,10 @@ func Test_ApiGwDynamic(t *testing.T) {
 	<-time.After(1 * time.Second)
 
 	var wg sync.WaitGroup
-	var ups []upstream
+	var ups []Upstream
 	send, can := context.WithCancel(context.Background())
 	for _, b := range ports1 {
-		nu := upstream{
+		nu := Upstream{
 			Addr:      b,
 			UrlPrefix: "/pong",
 		}
@@ -164,13 +164,13 @@ func Test_ApiGwDynamic(t *testing.T) {
 		wg.Add(1)
 		go runServer(ctx, nu.Addr, nu.UrlPrefix)
 		_apiGw.Add(&nu)
-		go func(nu upstream) {
+		go func(nu Upstream) {
 			<-send.Done()
 			testEndpoint(t, &wg, nu.UrlPrefix)
 		}(nu)
 	}
 	for _, b := range ports2 {
-		nu := upstream{
+		nu := Upstream{
 			Addr:      b,
 			UrlPrefix: "/pong",
 		}
@@ -178,7 +178,7 @@ func Test_ApiGwDynamic(t *testing.T) {
 		wg.Add(1)
 		go runServer(ctx, nu.Addr, nu.UrlPrefix)
 		_apiGw.Add(&nu)
-		go func(nu upstream) {
+		go func(nu Upstream) {
 			<-send.Done()
 			testEndpoint(t, &wg, nu.UrlPrefix)
 		}(nu)

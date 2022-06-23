@@ -1,0 +1,9 @@
+version: '3'
+
+vars:
+  RYO_FAAS_DOCKERFILES : /Users/ishan/go/src/github.com/Ishan27g/ryo-Faas/.dockerfiles
+
+tasks:
+  jaeger:
+    cmds:
+      - cd {{.RYO_FAAS_DOCKERFILES}} && docker compose run --service-ports --rm jaeger

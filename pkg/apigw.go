@@ -3,14 +3,16 @@ package pkg
 import (
 	"context"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Ishan27g/go-utils/tracing"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -21,18 +23,20 @@ type ApiGw interface {
 	// Start api-pkg, non-blocking
 	Start(close chan bool)
 	// Add a service
-	Add(u *upstream)
-	Remove(u *upstream)
+	Add(u *Upstream)
+	Remove(u *Upstream)
 	// Handler() http.HandlerFunc
 	// GetServiceProxy returns the http.ReverseProxy for the host that matched the urlPrefix
-	getServiceProxy(urlPrefix string) (string, *RTPxy)
+	getServiceProxy(urlPrefix string) (string, string, *RTPxy)
 	printProxyTable()
 }
 
 func NewFromFile(fileName string) ApiGw {
+
 	if config, _ := ReadConfFile(fileName); config.Listen != "" {
 		return NewFromConfig(config)
 	}
+
 	return nil
 }
 
@@ -43,9 +47,10 @@ type apiGw struct {
 	addr    string
 	delay   time.Duration
 	proxies map[string]upstreamGroup // url-prefix <-> upstreamGroup
+	tp      tracing.TraceProvider
 }
 
-func (a *apiGw) Add(upstream *upstream) {
+func (a *apiGw) Add(upstream *Upstream) {
 	a.Lock()
 	defer a.Unlock()
 	if a.check { // ping before connection
@@ -62,14 +67,14 @@ func (a *apiGw) Add(upstream *upstream) {
 	a.proxies[upstream.UrlPrefix].AddHost(upstream)
 }
 
-func asGroup(upstream *upstream) upstreamGroup {
+func asGroup(upstream *Upstream) upstreamGroup {
 	return newUpsGroup(balance{
 		Addr:      []string{upstream.Addr},
 		UrlPrefix: upstream.UrlPrefix,
 	})
 }
 
-func (a *apiGw) Remove(upstream *upstream) {
+func (a *apiGw) Remove(upstream *Upstream) {
 	a.Lock()
 	defer a.Unlock()
 	if a.proxies[upstream.UrlPrefix] == nil {
@@ -89,24 +94,19 @@ func NewFromConfig(config Config) ApiGw {
 
 	delay, _ := time.ParseDuration(config.Delay)
 	proxy := &apiGw{
-		Mutex: sync.Mutex{},
-		client: http.Client{
-			Transport: &http.Transport{
-				DialContext: (&net.Dialer{
-					Timeout: RequestMaxWaitTime, // only for initial health-check
-				}).DialContext,
-			},
-		},
+		Mutex:   sync.Mutex{},
+		client:  *otelhttp.DefaultClient,
 		check:   config.Check,
 		delay:   delay,
 		addr:    config.Listen,
 		proxies: make(map[string]upstreamGroup),
+		tp:      tracing.Init("jaeger", "api-gw", ""),
 	}
 
 	// read balancer from config
 	for _, group := range config.Balancer {
 		for _, s := range group.Addr {
-			proxy.Add(&upstream{
+			proxy.Add(&Upstream{
 				Name:      "",
 				Addr:      s,
 				UrlPrefix: group.UrlPrefix,
@@ -115,7 +115,7 @@ func NewFromConfig(config Config) ApiGw {
 	}
 	// read balancer from config
 	for _, ups := range config.Upstreams {
-		proxy.Add(&upstream{
+		proxy.Add(&Upstream{
 			Name:      "",
 			Addr:      ups.Addr,
 			UrlPrefix: ups.UrlPrefix,
@@ -126,7 +126,7 @@ func NewFromConfig(config Config) ApiGw {
 		log.Println("no upstreams detected")
 	}
 
-	proxy.printProxyTable()
+	// proxy.printProxyTable()
 	return proxy
 }
 
@@ -163,17 +163,34 @@ func (a *apiGw) printProxyTable() {
 }
 
 func (a *apiGw) start(close chan bool) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+	provider := tracing.Init("jaeger", "api-gw", "")
+	defer provider.Close()
+
+	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
-		if pHost, pxy := a.getServiceProxy(r.URL.Path); pxy != nil {
+		if name, pHost, pxy := a.getServiceProxy(r.URL.Path); pxy != nil {
+
+			ctx, span := provider.Get().Start(r.Context(), name+"|"+r.RequestURI)
+
 			<-time.After(a.delay)
-			rspStatus := pxy.RoundTrip(w, r)
+			span.SetName(name + "|" + r.RequestURI)
+			span.SetAttributes(attribute.Key("proxy_balance_group").String(name))
+			span.SetAttributes(attribute.Key("proxy_Delay").String(a.delay.String()))
+			span.SetAttributes(attribute.Key("proxy_To").String(pHost))
+			span.SetAttributes(attribute.Key("endpoint").String(r.URL.Path))
+			rspStatus := pxy.RoundTrip(ctx, span, w, r)
+			span.SetAttributes(attribute.Key("proxy_ResponseStatus").Int(rspStatus))
+
 			log.Print(time.Since(now).Microseconds(), "us ", "- [", r.RequestURI, "] ", "\t -> \t", pHost, " ", rspStatus)
+			span.End()
 		} else {
 			http.NotFound(w, r)
 		}
-	})
+	}))
+
 	go func() {
+		a.printProxyTable()
 		log.Print("Gateway Started on ", a.addr)
 		log.Print(http.ListenAndServe(a.addr, nil))
 	}()
@@ -183,14 +200,14 @@ func (a *apiGw) start(close chan bool) {
 }
 
 // GetServiceProxy matches the urlPrefix & returns corresponding reverseProxy
-func (a *apiGw) getServiceProxy(urlPrefix string) (string, *RTPxy) {
+func (a *apiGw) getServiceProxy(urlPrefix string) (string, string, *RTPxy) {
 	a.Lock()
 	defer a.Unlock()
 	for proxyUrl, upStreamGroup := range a.proxies {
 		if strings.HasPrefix(urlPrefix, proxyUrl) {
 			service := *upStreamGroup.GetNext()
-			return service.upstream.Addr, service.pxy
+			return service.upstream.Name, service.upstream.Addr, service.pxy
 		}
 	}
-	return "", nil
+	return "", "", nil
 }
