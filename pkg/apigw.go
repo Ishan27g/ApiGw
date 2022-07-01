@@ -106,9 +106,9 @@ func NewFromConfig(config Config) ApiGw {
 
 	// read balancer from config
 	for _, group := range config.Balancer {
-		for i, s := range group.Addr {
+		for _, s := range group.Addr {
 			proxy.Add(&Upstream{
-				Name:      group.names[i],
+				Name:      "",
 				Addr:      s,
 				UrlPrefix: group.UrlPrefix,
 			})

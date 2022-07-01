@@ -85,6 +85,7 @@ func buildUpstreams(ctx context.Context) Config {
 	for _, u := range c.Upstreams {
 		go runServer(ctx, u.Addr, u.UrlPrefix) // /ping1,/ping2,/ping3
 	}
+	time.After(1 * time.Second)
 	_apiGw = NewFromConfig(c)
 	return c
 }

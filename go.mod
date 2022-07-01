@@ -3,7 +3,7 @@ module github.com/Ishan27g/ApiGw
 go 1.18
 
 require (
-	github.com/Ishan27g/go-utils/tracing v0.0.0
+	github.com/Ishan27g/go-utils/tracing v0.0.0-20220623131146-f3b053bfe446
 	github.com/gin-gonic/gin v1.8.1
 	github.com/hashicorp/hcl/v2 v2.12.0
 	github.com/jedib0t/go-pretty/v6 v6.3.1
@@ -56,5 +56,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
-
-replace github.com/Ishan27g/go-utils/tracing => ../go-utils/tracing
