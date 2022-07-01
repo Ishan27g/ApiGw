@@ -27,7 +27,6 @@ func (p *RTPxy) RoundTrip(ctx context.Context, span trace.Span, rw http.Response
 }
 func roundTrip(ctx context.Context, span trace.Span, host string, rw http.ResponseWriter, req *http.Request) int {
 	outReq, _ := http.NewRequestWithContext(ctx, req.Method, host+req.RequestURI, req.Body)
-	// span := trace.SpanFromContext(outReq.Context())
 	for key, value := range req.Header {
 		for _, v := range value {
 			outReq.Header.Add(key, v)

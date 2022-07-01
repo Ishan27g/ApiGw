@@ -28,7 +28,7 @@ func (b *balanceGroup) AddHost(ups *Upstream) {
 	defer b.lock.Unlock()
 	s := *b.services
 	s = append(s, newService(Upstream{
-		Name:      "",
+		Name:      ups.Name,
 		Addr:      ups.Addr,
 		UrlPrefix: ups.UrlPrefix,
 	}))
@@ -91,9 +91,9 @@ func (b *balanceGroup) GetNext() *service {
 
 func newUpsGroup(bGroup balance) upstreamGroup {
 	var services []service
-	for _, upStream := range bGroup.Addr {
+	for i, upStream := range bGroup.Addr {
 		services = append(services, newService(Upstream{
-			Name:      "balancer-group-abc",
+			Name:      bGroup.names[i],
 			Addr:      upStream,
 			UrlPrefix: bGroup.UrlPrefix,
 		}))

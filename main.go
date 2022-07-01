@@ -33,14 +33,29 @@ var startCmd = cli.Command{
 		var apiGw pkg.ApiGw
 		if c.Args().Len() == 0 {
 			apiGw = pkg.NewFromConfig(pkg.Config{
-				Listen: ":9999",
-				Check:  true,
+				Listen:    ":9999",
+				Check:     true,
 				Upstreams: []*pkg.Upstream{
-					{
-						Name:      "service-1",
-						Addr:      "http://localhost:5999",
-						UrlPrefix: "/any",
-					},
+					//{
+					//	Name:      "service-1",
+					//	Addr:      "http://localhost:7001",
+					//	UrlPrefix: "/ping",
+					//},
+					//{
+					//	Name:      "service-2",
+					//	Addr:      "http://localhost:7002",
+					//	UrlPrefix: "/ping",
+					//},
+					//{
+					//	Name:      "service-3",
+					//	Addr:      "http://localhost:7003",
+					//	UrlPrefix: "/ping",
+					//},
+					//{
+					//	Name:      "service-4",
+					//	Addr:      "http://localhost:3001",
+					//	UrlPrefix: "/",
+					//},
 				},
 			})
 		} else {

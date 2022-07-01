@@ -27,7 +27,7 @@ type ApiGw interface {
 	Remove(u *Upstream)
 	// Handler() http.HandlerFunc
 	// GetServiceProxy returns the http.ReverseProxy for the host that matched the urlPrefix
-	getServiceProxy(urlPrefix string) (string, string, *RTPxy)
+	getServiceProxy(urlPrefix string) *service
 	printProxyTable()
 }
 
@@ -70,6 +70,7 @@ func (a *apiGw) Add(upstream *Upstream) {
 func asGroup(upstream *Upstream) upstreamGroup {
 	return newUpsGroup(balance{
 		Addr:      []string{upstream.Addr},
+		names:     []string{upstream.Name},
 		UrlPrefix: upstream.UrlPrefix,
 	})
 }
@@ -105,9 +106,9 @@ func NewFromConfig(config Config) ApiGw {
 
 	// read balancer from config
 	for _, group := range config.Balancer {
-		for _, s := range group.Addr {
+		for i, s := range group.Addr {
 			proxy.Add(&Upstream{
-				Name:      "",
+				Name:      group.names[i],
 				Addr:      s,
 				UrlPrefix: group.UrlPrefix,
 			})
@@ -116,7 +117,7 @@ func NewFromConfig(config Config) ApiGw {
 	// read balancer from config
 	for _, ups := range config.Upstreams {
 		proxy.Add(&Upstream{
-			Name:      "",
+			Name:      ups.Name,
 			Addr:      ups.Addr,
 			UrlPrefix: ups.UrlPrefix,
 		})
@@ -138,23 +139,24 @@ func (a *apiGw) printProxyTable() {
 	t.SetOutputMirror(os.Stdout)
 	t.SetStyle(table.StyleLight)
 	t.Style().Options.DrawBorder = false
-	t.AppendHeader(table.Row{"Upstream Group", "Destination"})
+	t.AppendHeader(table.Row{"Name", "Upstream Group", "Destination"})
 
 	var forEachUpstreamGroup = func(cb func(upstreamGroup), upstreamGroups map[string]upstreamGroup) {
 		for _, upStreamGroup := range upstreamGroups {
 			cb(upStreamGroup)
 		}
 	}
-	var forEachUpstreamHost = func(cb func(string), upStreamGroup upstreamGroup) {
-		for _, upstream := range upStreamGroup.GetHosts() {
-			cb(upstream)
+	var forEachUpstreamHost = func(cb func(*service), upStreamGroup upstreamGroup) {
+		for _, _ = range upStreamGroup.GetHosts() {
+			service := upStreamGroup.GetNext()
+			cb(service)
 		}
 	}
 
 	forEachUpstreamGroup(func(upStreamGroup upstreamGroup) {
 		var logs []table.Row
-		forEachUpstreamHost(func(host string) {
-			logs = append(logs, table.Row{upStreamGroup.GetUrlPrefix(), host})
+		forEachUpstreamHost(func(s *service) {
+			logs = append(logs, table.Row{s.upstream.Name, upStreamGroup.GetUrlPrefix(), s.upstream.Addr})
 		}, upStreamGroup)
 		t.AppendRows(logs)
 		t.AppendSeparator()
@@ -164,17 +166,24 @@ func (a *apiGw) printProxyTable() {
 
 func (a *apiGw) start(close chan bool) {
 
-	provider := tracing.Init("jaeger", "api-gw", "")
+	provider := tracing.Init("jaeger", "api-gw", "proxy")
 	defer provider.Close()
 
-	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	http.Handle("/", otelhttp.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
-		if name, pHost, pxy := a.getServiceProxy(r.URL.Path); pxy != nil {
-
-			ctx, span := provider.Get().Start(r.Context(), name+"|"+r.RequestURI)
-
+		service := a.getServiceProxy(r.URL.Path)
+		if service == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if name, pHost, pxy := service.upstream.Name, service.upstream.Addr, service.pxy; pxy != nil {
+			ctx, span := service.provider.Get().Start(r.Context(), name+"|"+r.RequestURI)
+			if span.IsRecording() {
+				log.Println("span is recording", span.SpanContext().SpanID())
+			}
+			defer span.End()
 			<-time.After(a.delay)
-			span.SetName(name + "|" + r.RequestURI)
 			span.SetAttributes(attribute.Key("proxy_balance_group").String(name))
 			span.SetAttributes(attribute.Key("proxy_Delay").String(a.delay.String()))
 			span.SetAttributes(attribute.Key("proxy_To").String(pHost))
@@ -183,11 +192,10 @@ func (a *apiGw) start(close chan bool) {
 			span.SetAttributes(attribute.Key("proxy_ResponseStatus").Int(rspStatus))
 
 			log.Print(time.Since(now).Microseconds(), "us ", "- [", r.RequestURI, "] ", "\t -> \t", pHost, " ", rspStatus)
-			span.End()
 		} else {
 			http.NotFound(w, r)
 		}
-	}))
+	}), "proxy"))
 
 	go func() {
 		a.printProxyTable()
@@ -200,14 +208,14 @@ func (a *apiGw) start(close chan bool) {
 }
 
 // GetServiceProxy matches the urlPrefix & returns corresponding reverseProxy
-func (a *apiGw) getServiceProxy(urlPrefix string) (string, string, *RTPxy) {
+func (a *apiGw) getServiceProxy(urlPrefix string) *service {
 	a.Lock()
 	defer a.Unlock()
 	for proxyUrl, upStreamGroup := range a.proxies {
 		if strings.HasPrefix(urlPrefix, proxyUrl) {
-			service := *upStreamGroup.GetNext()
-			return service.upstream.Name, service.upstream.Addr, service.pxy
+			service := upStreamGroup.GetNext()
+			return service
 		}
 	}
-	return "", "", nil
+	return nil
 }

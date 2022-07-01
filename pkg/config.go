@@ -21,6 +21,7 @@ type Config struct {
 type balance struct {
 	Addr      []string `hcl:"addr"`
 	UrlPrefix string   `hcl:"urlPrefix"`
+	names     []string
 }
 type Upstream struct {
 	Name      string `hcl:",label"`
